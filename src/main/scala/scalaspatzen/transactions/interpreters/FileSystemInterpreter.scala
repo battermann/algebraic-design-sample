@@ -28,7 +28,6 @@ object FileSystemInterpreter extends FileSystem[ErrorOrIO] {
         val writer = new PrintWriter(new File(fileName))
         writer.write(text)
         writer.close()
-        new File(fileName).getAbsolutePath
       }.attempt
     }
 }

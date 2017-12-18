@@ -1,16 +1,16 @@
 package scalaspatzen.transactions.algebra
 
-import cats.Monoid
-import cats.implicits._
 import org.joda.time.Interval
+
 import scala.language.higherKinds
 
-trait Analyzer[Debitor, Transaction, Amount] {
+trait Analyzer[Debitor, Transaction, Amount, PayableAmounts, ComparisonResult] {
 
   type TransactionsPerDebitor = Map[Debitor, List[Transaction]]
   type TransactionsPerIntervalPerDebitor =
     Map[Debitor, Map[Interval, List[Transaction]]]
-  type AmountPerIntervalPerDebitor = Map[Debitor, Map[Interval, Amount]]
+  type AmountsPerIntervalPerDebitor = Map[Debitor, Map[Interval, Amount]]
+  type ComparisonResults = Map[Debitor, List[ComparisonResult]]
   type RawLine = String
 
   def decode(line: RawLine): Option[Transaction]
@@ -20,16 +20,16 @@ trait Analyzer[Debitor, Transaction, Amount] {
   def groupByDebitor(
       debitors: List[Debitor]): List[Transaction] => TransactionsPerDebitor
 
-  def groupByTimeInterval
+  def groupByTimeInterval(paymentsDueDayOfMonth: Int)
     : TransactionsPerDebitor => TransactionsPerIntervalPerDebitor
 
-  def format(tans: AmountPerIntervalPerDebitor): String
+  def compare(debitors: List[Debitor], payableAmounts: PayableAmounts)
+    : AmountsPerIntervalPerDebitor => ComparisonResults
+
+  def toHtml(result: ComparisonResults): String
 
   // composed operations
 
-  def decodeLines: List[RawLine] => List[Transaction] = _.flatMap(decode)
-
-  def sumAmounts(implicit m: Monoid[Amount])
-    : TransactionsPerIntervalPerDebitor => AmountPerIntervalPerDebitor =
-    _.mapValues(x => x.mapValues(_.map(getAmount).combineAll))
+  def decodeLines: List[RawLine] => List[Transaction] =
+    _.flatMap(decode).distinct
 }

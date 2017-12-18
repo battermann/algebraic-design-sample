@@ -2,13 +2,18 @@ package scalaspatzen.transactions.model
 
 import java.text.Normalizer
 
+import org.joda.time.Interval
+
 final case class Debitor(
-  name: String,
-  child: String,
-  identifiers: List[String] = Nil
+  lastNames: List[String],
+  children: List[String],
+  senderIds: List[String],
+  tuitionSuspended: List[Interval],
+  foodAllowanceSuspended: List[Interval],
+  extraPayments: BigDecimal
 ) {
-  val normalizedIdentifiers: List[String] = {
-    identifiers.map(s => Normalizer
+  val normalizedSenderIds: List[String] = {
+    senderIds.map(s => Normalizer
       .normalize(s, Normalizer.Form.NFD)
       .replaceAll("[\\p{InCombiningDiacriticalMarks}]", "")
       .toLowerCase
