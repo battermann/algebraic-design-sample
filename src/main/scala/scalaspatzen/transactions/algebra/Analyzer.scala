@@ -23,8 +23,6 @@ trait Analyzer[Debitor, Transaction, Amount, PayableAmounts, ComparisonResult] {
   def compare(debitors: List[Debitor], payableAmounts: PayableAmounts)
     : TransactionsPerIntervalPerDebitor => ComparisonResults
 
-  def toHtml(result: ComparisonResults): String
-
   // composed operations
 
   def decodeLines: List[RawLine] => List[Transaction] =

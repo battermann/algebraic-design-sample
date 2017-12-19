@@ -3,7 +3,8 @@ package scalaspatzen.transactions.algebra
 import scala.language.higherKinds
 
 trait AnalyzerService[F[_], Report] {
-  def generateReport(inputDir: String): F[Report]
-  def saveReport(report: Report, outputPath: String): F[Unit]
-  def openReportInBrowser(filePath: String): F[Unit]
+  def generateHtmlReport(inputDir: String): F[Report]
+  def exportToPdf(html: String, filename: String): F[Unit]
+  def saveHtmlReport(report: String, outputPath: String): F[Unit]
+  def openHtmlReportInBrowser(filename: String): F[Unit]
 }

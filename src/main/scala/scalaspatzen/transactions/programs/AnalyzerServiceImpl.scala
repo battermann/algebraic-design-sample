@@ -15,12 +15,16 @@ class AnalyzerServiceImpl(
                        BigDecimal,
                        (BigDecimal, List[MonthlyFees]),
                        ComparisonResult],
-    config: Config[ErrorOrIO, Environment])(implicit m: Monoid[BigDecimal])
-    extends AnalyzerService[ErrorOrIO, String] {
+    resources: Resources[ErrorOrIO, Environment],
+    pdfConverter: PdfConverter[ErrorOrIO, String],
+    formatter: Formatter[Map[Debitor, List[ComparisonResult]]])(
+    implicit m: Monoid[BigDecimal])
+    extends AnalyzerService[ErrorOrIO, Map[Debitor, List[ComparisonResult]]] {
 
-  def generateReport(inputDir: String): ErrorOrIO[String] = {
+  def generateHtmlReport(
+      inputDir: String): ErrorOrIO[Map[Debitor, List[ComparisonResult]]] = {
     import analyzer._
-    import config._
+    import resources._
     import fs._
 
     def analyze(debitors: List[Debitor],
@@ -37,23 +41,37 @@ class AnalyzerServiceImpl(
       csvFiles = files.filter(path => path.endsWith(".csv"))
       rawLines <- csvFiles.traverse(readAllLines("Windows-1250"))
       c        <- getConfig
-      result   = analyze(c.debitors, c.paymentsDueDayOfMonth, (c.yearlyFee, c.monthlyFees))(rawLines.flatten)
-    } yield toHtml(result)
+    } yield
+      analyze(c.debitors,
+              c.paymentsDueDayOfMonth,
+              (c.yearlyFee, c.monthlyFees))(rawLines.flatten)
   }
 
-  def saveReport(report: String, outputPath: String): ErrorOrIO[Unit] = {
-    fs.writeAllText(report, outputPath)
+  def saveHtmlReport(report: String, filename: String): ErrorOrIO[Unit] = {
+    fs.writeAllText(report, filename)
   }
 
-  def openReportInBrowser(filePath: String): ErrorOrIO[Unit] = {
-    browser.openFile(filePath)
+  def openHtmlReportInBrowser(filename: String): ErrorOrIO[Unit] = {
+    browser.openFile(filename)
   }
 
-  def generateReportAndOpenInBrowser(input: String, output: String): ErrorOrIO[Unit] = {
+  def generateReportAndOpenInBrowser(input: String,
+                                     output: String): ErrorOrIO[Unit] = {
+    import formatter._
+    import resources._
+
     for {
-      report <- generateReport(input)
-      _ <- saveReport(report, output)
-      _ <- openReportInBrowser(output)
+      report <- generateHtmlReport(input)
+      md     = toMarkdown(report)
+      css    <- getCss
+      html   = markdownToHtml(md, css)
+      _      <- saveHtmlReport(html, s"$output.html")
+      _      <- exportToPdf(html, s"$output.pdf")
+      _      <- openHtmlReportInBrowser(s"$output.html")
     } yield ()
+  }
+
+  def exportToPdf(html: String, filename: String): ErrorOrIO[Unit] = {
+    pdfConverter.exportToPdf(html, filename)
   }
 }

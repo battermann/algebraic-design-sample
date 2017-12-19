@@ -10,10 +10,10 @@ import cats.effect.IO
 
 object BrowserInterpreter extends Browser[ErrorOrIO] {
 
-  def openFile(filePath: String) = {
+  def openFile(filename: String): ErrorOrIO[Unit] = {
     EitherT {
       IO {
-        val file = new File(filePath)
+        val file = new File(filename)
         Desktop.getDesktop.browse(new URI("file://" + file.getAbsolutePath))
       }.attempt
     }

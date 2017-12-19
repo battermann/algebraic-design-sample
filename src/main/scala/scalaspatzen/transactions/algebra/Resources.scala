@@ -2,6 +2,7 @@ package scalaspatzen.transactions.algebra
 
 import scala.language.higherKinds
 
-trait Config[F[_], Config] {
+trait Resources[F[_], Config] {
   val getConfig: F[Config]
+  val getCss: F[String]
 }

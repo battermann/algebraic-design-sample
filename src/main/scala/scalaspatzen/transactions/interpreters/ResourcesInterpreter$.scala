@@ -8,10 +8,10 @@ import jsonmodels.environmentconfig.EnvironmentConfig
 import org.joda.time.format.DateTimeFormat
 import play.api.libs.json.Json
 
-import scalaspatzen.transactions.algebra.Config
+import scalaspatzen.transactions.algebra.Resources
 import scalaspatzen.transactions.model.{Debitor, Environment, MonthlyFees}
 
-object ConfigInterpreter extends Config[ErrorOrIO, Environment] {
+object ResourcesInterpreter$ extends Resources[ErrorOrIO, Environment] {
   private val config = ConfigFactory.load()
   private val formatter = DateTimeFormat.forPattern("MM.yyyy")
   private def toInterval(dateString: String) = {
@@ -40,11 +40,17 @@ object ConfigInterpreter extends Config[ErrorOrIO, Environment] {
               tuitionSuspended =
                 d.tuitionSuspended.map(toInterval).toList,
               foodAllowanceSuspended =
-                d.foodAlloanceSuspended.map(toInterval).toList,
+                d.foodAllowanceSuspended.map(toInterval).toList,
               extraPayments = BigDecimal(d.extraPayments.toString)
           ))
           .toList
       )
+    }.attempt
+  }
+
+  val getCss: ErrorOrIO[String] = EitherT {
+    IO {
+      io.Source.fromURL(getClass.getResource("/bootstrap.min.css")).mkString
     }.attempt
   }
 }

@@ -12,7 +12,9 @@ object Main extends CaseApp[CliOptions] {
     val programs = new AnalyzerServiceImpl(FileSystemInterpreter,
                                            BrowserInterpreter,
                                            AnalyzerInterpreter,
-                                           ConfigInterpreter)
+                                           ResourcesInterpreter$,
+                                           PdfConverterInterpreter,
+                                           FormatterInterpreter)
 
     import programs._
 
