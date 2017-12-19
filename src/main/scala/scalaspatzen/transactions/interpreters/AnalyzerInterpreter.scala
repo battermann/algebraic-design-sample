@@ -1,128 +1,147 @@
 package scalaspatzen.transactions.interpreters
 
-import java.util
+import java.util.UUID
 
-import scalaspatzen.transactions.algebra.Analyzer
-import scalaspatzen.transactions.model._
+import cats.Monoid
+import cats.implicits._
 import com.github.nscala_time.time.Imports._
-import com.vladsch.flexmark.ext.abbreviation.AbbreviationExtension
-import com.vladsch.flexmark.ext.definition.DefinitionExtension
-import com.vladsch.flexmark.ext.footnotes.FootnoteExtension
-import com.vladsch.flexmark.ext.tables.TablesExtension
-import com.vladsch.flexmark.ext.typographic.TypographicExtension
-import com.vladsch.flexmark.html.HtmlRenderer
-import com.vladsch.flexmark.parser.{Parser, ParserEmulationProfile}
-import com.vladsch.flexmark.util.options.MutableDataSet
-import org.joda.time.Interval
 import org.joda.time.format.DateTimeFormat
+import org.joda.time.{DateTime, Interval}
 
 import scala.util.Try
+import scalaspatzen.transactions.algebra.Analyzer
+import scalaspatzen.transactions.model._
 
-object AnalyzerInterpreter extends Analyzer[Debitor, Transaction, BigDecimal] {
+object AnalyzerInterpreter
+    extends Analyzer[Debitor,
+                     Payment,
+                     BigDecimal,
+                     (BigDecimal, List[MonthlyFees]),
+                     ComparisonResult] {
+
+  private val formatter = DateTimeFormat.forPattern("dd.MM.yy")
+
   private def removeQuotes(str: String): String = {
     str.replace("\"", "")
   }
 
-  private val formatter = DateTimeFormat.forPattern("dd.MM.yy")
-
-  def decode(line: String): Option[Transaction] = {
+  def decode(line: String): Option[Payment] = {
     val elements = line.split("\";\"").map(removeQuotes)
     for {
       dateTime <- Try(formatter.parseDateTime(elements.head)).toOption
-      amount <- Try(elements.drop(6).head.replace(".", "").replace(",", ".").replace("€", "").trim)
-        .map(BigDecimal(_)).toOption
-      tanType <- elements.drop(2).headOption.map(_ => if (amount >= 0) Credit else Debit)
-      description <- elements.drop(3).headOption
+      amount <- Try(
+        elements
+          .drop(6)
+          .head
+          .replace(".", "")
+          .replace(",", ".")
+          .replace("€", "")
+          .trim)
+        .map(BigDecimal(_))
+        .toOption
       sender <- elements.drop(4).headOption
-      receiver <- elements.drop(5).headOption
-    } yield {
-      Transaction(dateTime, tanType, description, sender, receiver, amount)
-    }
-  }
-
-  def getAmount(tan: Transaction): BigDecimal = tan.amount
-
-  def groupByDebitor(debitors: List[Debitor]): List[Transaction] => Map[Debitor, List[Transaction]] = (
-    tans: List[Transaction]) => {
-    tans
-      .flatMap { tan =>
-        debitors
-          .find(d =>
-            d.normalizedIdentifiers.exists(id =>
-              tan.sender.toLowerCase.contains(id)))
-          .map(d => (d, tan))
+      payment <- if (amount > 0) {
+        Payment(UUID.nameUUIDFromBytes(line.toString.getBytes).toString,
+                dateTime,
+                sender,
+                amount).some
+      } else {
+        None
       }
-      .groupBy(_._1)
-      .mapValues(_.map(_._2))
+    } yield payment
   }
 
-  private def getInterval(dt: DateTime): Interval = {
-    val withCorrectMonth =
-      if (dt.dayOfMonth().get <= 10)
-        dt.plusMonths(-1)
-      else
-        dt
-    val start = withCorrectMonth
-      .withDayOfMonth(11)
-      .withTimeAtStartOfDay()
-    val end = withCorrectMonth
-      .plusMonths(1)
-      .withDayOfMonth(11)
-      .withTimeAtStartOfDay()
-      .plusSeconds(-1)
-    start to end
-  }
-
-  def groupByTimeInterval: AnalyzerInterpreter.TransactionsPerDebitor => Map[Debitor, Map[Interval, List[Transaction]]] = (
-    tansPerDebitor: TransactionsPerDebitor) =>
-    tansPerDebitor.mapValues { v =>
-      v.map(tan => (getInterval(tan.date), tan))
+  def groupByDebitor(
+      debitors: List[Debitor]): List[Payment] => Map[Debitor, List[Payment]] =
+    (tans: List[Payment]) => {
+      tans.distinct
+        .flatMap { tan =>
+          debitors
+            .find(d =>
+              d.normalizedSenderIds.exists(id =>
+                tan.sender.toLowerCase.contains(id)))
+            .map(d => (d, tan))
+        }
         .groupBy(_._1)
         .mapValues(_.map(_._2))
     }
 
-  private def toMarkdown(tans: AmountPerIntervalPerDebitor) = {
-    val fmt = DateTimeFormat.forPattern("dd.MM.yyy")
-    val monthYearFormatter = DateTimeFormat.forPattern("MMMM yyyy")
-    val intervals = tans.values.flatMap(_.keys).toList.distinct
-    val start = intervals.minBy(_.startMillis).start
-    val end = intervals.maxBy(_.endMillis).end
-    val tableHeader =
-      "| Name | Month | Amount |\n| --- | --- | --- |"
-    val rows = tans.map {
-      case (debitor, payments) =>
-        val firstLine = s"| ${debitor.name} | | |"
-        val subsequent = payments.map {
-          case (interval, payment) =>
-            s"| | ${monthYearFormatter.print(interval.end)} | $payment |"
-        }.toList
-        (firstLine :: subsequent).mkString("\n")
-    }.toList
-
-    val table = (tableHeader :: rows).mkString("\n")
-    val title = s"# Payments Scalaspatzen e.V. ${fmt.print(start)} - ${fmt.print(end)}"
-    List(title, table).mkString("\n\n")
+  private def getDueInterval(dt: DateTime,
+                             paymentsDueDayOfMonth: Int): Interval = {
+    val withCorrectMonth =
+      if (dt.dayOfMonth().get <= paymentsDueDayOfMonth)
+        dt
+      else
+        dt.plusMonths(1)
+    val start = withCorrectMonth
+      .withDayOfMonth(1)
+      .withTimeAtStartOfDay()
+    val end = withCorrectMonth
+      .plusMonths(1)
+      .withDayOfMonth(1)
+      .withTimeAtStartOfDay()
+    start to end
   }
 
-  def format(tans: AmountPerIntervalPerDebitor): RawLine = {
-    val md = toMarkdown(tans)
+  def groupByTimeInterval(paymentsDueDayOfMonth: Int)
+    : TransactionsPerDebitor => Map[Debitor, Map[Interval, List[Payment]]] =
+    (tansPerDebitor: TransactionsPerDebitor) =>
+      tansPerDebitor.mapValues { v =>
+        v.map(tan => (getDueInterval(tan.date, paymentsDueDayOfMonth), tan))
+          .groupBy(_._1)
+          .mapValues(_.map(_._2))
+    }
 
-    val options = new MutableDataSet()
-    options.setFrom(ParserEmulationProfile.KRAMDOWN)
-    options.set(
-      Parser.EXTENSIONS, util.Arrays.asList(
-        AbbreviationExtension.create(),
-        DefinitionExtension.create(),
-        FootnoteExtension.create(),
-        TablesExtension.create(),
-        TypographicExtension.create()
-      ))
-
-    val parser = Parser.builder(options).build()
-    val renderer = HtmlRenderer.builder(options).build()
-
-    val document = parser.parse(md)
-    renderer.render(document)
+  private def compare(debitor: Debitor,
+                      payableAmounts: (BigDecimal, List[MonthlyFees]),
+                      tans: Map[Interval, List[Payment]])(
+      implicit m: Monoid[BigDecimal]): List[ComparisonResult] = {
+    val (yearlyFee, monthlyFees) = payableAmounts
+    val intervals = (monthlyFees.map(_.interval) ++ tans.keys).distinct
+    val results = intervals
+      .map { interval =>
+        val (tuitionExpected, foodExpected) = monthlyFees
+          .find(_.interval == interval)
+          .map { f =>
+            val tuition = if (debitor.tuitionSuspended.contains(interval)) {
+              m.empty
+            } else {
+              f.tuition
+            }
+            val foodAllowance =
+              if (debitor.foodAllowanceSuspended.contains(interval)) {
+                m.empty
+              } else {
+                f.foodAllowance
+              }
+            (tuition, foodAllowance)
+          }
+          .getOrElse((m.empty, m.empty))
+        val actualPayments = tans.getOrElse(interval, Nil)
+        ComparisonResult(isAggregate = false,
+                         interval.some,
+                         0,
+                         tuitionExpected,
+                         foodExpected,
+                         actualPayments,
+                         extraPayments = m.empty)
+      }
+      .sortBy(_.interval.map(_.start).getOrElse(new DateTime(0))) match {
+      case Nil => Nil
+      case h :: t =>
+        h.copy(yearlyFee = yearlyFee, extraPayments = debitor.extraPayments) :: t
+    }
+    val total = results.combineAll
+    results :+ total
   }
 
+  def compare(debitors: List[Debitor],
+              payableAmounts: (BigDecimal, List[MonthlyFees]))
+    : TransactionsPerIntervalPerDebitor => Map[Debitor,
+                                               List[ComparisonResult]] =
+    (tans: TransactionsPerIntervalPerDebitor) => {
+      debitors
+        .map(d => (d, compare(d, payableAmounts, tans.getOrElse(d, Map()))))
+        .toMap
+    }
 }

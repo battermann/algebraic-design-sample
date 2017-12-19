@@ -1,18 +1,24 @@
 package scalaspatzen.transactions
 
-import scalaspatzen.transactions.interpreters.{AnalyzerInterpreter, BrowserInterpreter, ConfigInterpreter, FileSystemInterpreter}
-import scalaspatzen.transactions.programs.Programs
 import caseapp.{CaseApp, RemainingArgs}
 import cats.implicits._
+
+import scalaspatzen.transactions.interpreters._
+import scalaspatzen.transactions.programs.AnalyzerServiceImpl
 
 object Main extends CaseApp[CliOptions] {
   override def run(options: CliOptions, remainingArgs: RemainingArgs): Unit = {
 
-    val analyzer = Programs.generateAndOpenPaymentReport(FileSystemInterpreter,
-                                    AnalyzerInterpreter,
-                                    ConfigInterpreter,
-                                    BrowserInterpreter) _
+    val programs = new AnalyzerServiceImpl(FileSystemInterpreter,
+                                           BrowserInterpreter,
+                                           AnalyzerInterpreter,
+                                           ResourcesInterpreter$,
+                                           PdfConverterInterpreter,
+                                           FormatterInterpreter)
 
-    analyzer(options.input, options.output).value.unsafeRunSync()
+    import programs._
+
+    generateReportAndOpenInBrowser(options.input, options.output).value
+      .unsafeRunSync()
   }
 }

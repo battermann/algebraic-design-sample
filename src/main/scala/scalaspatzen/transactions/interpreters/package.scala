@@ -9,4 +9,8 @@ package object interpreters {
   implicit class LiftIO[A](x: IO[A]) {
     def liftIO: ErrorOrIO[A] = EitherT.liftF(x)
   }
+
+  implicit class AmountFormatter(amount: BigDecimal) {
+    def formatAmount: String = f"$amount%1.2f"
+  }
 }
