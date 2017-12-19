@@ -37,7 +37,6 @@ object ConfigInterpreter extends Config[ErrorOrIO, Environment] {
             Debitor(
               lastNames = d.lastNames.toList,
               children = d.children.toList,
-              senderIds = d.paymentSenderIds.toList,
               tuitionSuspended =
                 d.tuitionSuspended.map(toInterval).toList,
               foodAllowanceSuspended =

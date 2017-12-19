@@ -23,10 +23,6 @@ class AnalyzerServiceImpl(
     import config._
     import fs._
 
-    def sumAmounts
-      : TransactionsPerIntervalPerDebitor => AmountsPerIntervalPerDebitor =
-      _.mapValues(x => x.mapValues(_.map(getAmount).combineAll))
-
     def analyze(debitors: List[Debitor],
                 paymentsDueDayOfMonth: Int,
                 payableAmounts: (BigDecimal, List[MonthlyFees]))
@@ -34,7 +30,6 @@ class AnalyzerServiceImpl(
       decodeLines andThen
         groupByDebitor(debitors) andThen
         groupByTimeInterval(paymentsDueDayOfMonth) andThen
-        sumAmounts andThen
         compare(debitors, payableAmounts)
 
     for {

@@ -29,11 +29,12 @@ object AnalyzerInterpreter
                      BigDecimal,
                      (BigDecimal, List[MonthlyFees]),
                      ComparisonResult] {
+
+  private val formatter = DateTimeFormat.forPattern("dd.MM.yy")
+
   private def removeQuotes(str: String): String = {
     str.replace("\"", "")
   }
-
-  private val formatter = DateTimeFormat.forPattern("dd.MM.yy")
 
   def decode(line: String): Option[Payment] = {
     val elements = line.split("\";\"").map(removeQuotes)
@@ -60,8 +61,6 @@ object AnalyzerInterpreter
       }
     } yield payment
   }
-
-  def getAmount(tan: Payment): BigDecimal = tan.amount
 
   def groupByDebitor(
       debitors: List[Debitor]): List[Payment] => Map[Debitor, List[Payment]] =
@@ -96,9 +95,7 @@ object AnalyzerInterpreter
   }
 
   def groupByTimeInterval(paymentsDueDayOfMonth: Int)
-    : AnalyzerInterpreter.TransactionsPerDebitor => Map[
-      Debitor,
-      Map[Interval, List[Payment]]] =
+    : TransactionsPerDebitor => Map[Debitor, Map[Interval, List[Payment]]] =
     (tansPerDebitor: TransactionsPerDebitor) =>
       tansPerDebitor.mapValues { v =>
         v.map(tan => (getDueInterval(tan.date, paymentsDueDayOfMonth), tan))
@@ -108,7 +105,7 @@ object AnalyzerInterpreter
 
   private def compare(debitor: Debitor,
                       payableAmounts: (BigDecimal, List[MonthlyFees]),
-                      tans: Map[Interval, BigDecimal])(
+                      tans: Map[Interval, List[Payment]])(
       implicit m: Monoid[BigDecimal]): List[ComparisonResult] = {
     val (yearlyFee, monthlyFees) = payableAmounts
     val intervals = (monthlyFees.map(_.interval) ++ tans.keys).distinct
@@ -131,20 +128,19 @@ object AnalyzerInterpreter
             (tuition, foodAllowance)
           }
           .getOrElse((m.empty, m.empty))
-        val amountPayed = tans.getOrElse(interval, m.empty)
+        val actualPayments = tans.getOrElse(interval, Nil)
         ComparisonResult(isAggregate = false,
                          interval.some,
                          0,
                          tuitionExpected,
                          foodExpected,
-                         amountPayed)
+                         actualPayments,
+                         extraPayments = m.empty)
       }
       .sortBy(_.interval.map(_.start).getOrElse(new DateTime(0))) match {
       case Nil => Nil
       case h :: t =>
-        h.copy(
-          yearlyFee = yearlyFee,
-          actualAmountPayed = h.actualAmountPayed |+| debitor.extraPayments) :: t
+        h.copy(yearlyFee = yearlyFee, extraPayments = debitor.extraPayments) :: t
     }
     val total = results.combineAll
     results :+ total
@@ -152,50 +148,57 @@ object AnalyzerInterpreter
 
   def compare(debitors: List[Debitor],
               payableAmounts: (BigDecimal, List[MonthlyFees]))
-    : AnalyzerInterpreter.AmountsPerIntervalPerDebitor => Map[
-      Debitor,
-      List[ComparisonResult]] =
-    (tans: AmountsPerIntervalPerDebitor) => {
+    : TransactionsPerIntervalPerDebitor => Map[Debitor,
+                                               List[ComparisonResult]] =
+    (tans: TransactionsPerIntervalPerDebitor) => {
       debitors
         .map(d => (d, compare(d, payableAmounts, tans.getOrElse(d, Map()))))
         .toMap
     }
 
   def toHtml(result: ComparisonResults): String = {
-    val tables = result.map(format).toList.sorted.mkString("\n\n")
-    val title =
-      s"# Payments Scalaspatzen e.V."
-    val md = s"""$title
-       |
-       |$tables
-     """.stripMargin
+    val md = toMarkdown(result)
 
     val options = new MutableDataSet()
-    options.setFrom(ParserEmulationProfile.KRAMDOWN)
-    options.set(
-      Parser.EXTENSIONS,
-      util.Arrays.asList(
-        AbbreviationExtension.create(),
-        DefinitionExtension.create(),
-        FootnoteExtension.create(),
-        TablesExtension.create(),
-        TypographicExtension.create()
+      .setFrom(ParserEmulationProfile.KRAMDOWN)
+      .set(TablesExtension.CLASS_NAME, "table")
+      .set(
+        Parser.EXTENSIONS,
+        util.Arrays.asList(
+          AbbreviationExtension.create(),
+          DefinitionExtension.create(),
+          FootnoteExtension.create(),
+          TablesExtension.create(),
+          TypographicExtension.create()
+        )
       )
-    )
 
     val parser = Parser.builder(options).build()
     val renderer = HtmlRenderer.builder(options).build()
 
     val document = parser.parse(md)
-    renderer.render(document)
+    val content = renderer.render(document)
+    bootstrapTemplate(content)
   }
 
-  private def format(
-      resultsPerDebitor: (Debitor, List[ComparisonResult])): String = {
-    val (debitor, results) = resultsPerDebitor
-    val monthYearFormatter = DateTimeFormat.forPattern("yyyy MMMM")
+  private def toMarkdown(result: ComparisonResults) = {
+    val tables =
+      result.map(singleDebitorToMarkdown).toList.sorted.mkString("\n</br>\n")
+    val title =
+      s"# Payments Scalaspatzen e.V."
+    s"""$title
+       |
+       |$tables
+     """.stripMargin
+  }
+
+  private val monthYearFormatter = DateTimeFormat.forPattern("yyyy MMMM")
+
+  private def singleDebitorToMarkdown(
+      comparisonResults: (Debitor, List[ComparisonResult])): String = {
+    val (debitor, results) = comparisonResults
     val tableHeader =
-      s"| ${debitor.lastNames.sorted.mkString(", ")} | yearly | tuition | food | total | actual | diff |\n| --- | --- | --- | --- | --- | --- | --- |"
+      s"| period | yearly (€) | tuition (€) | food (€) | total (€) | actual (€) | balance (€) |\n| --- | ---: | ---: | ---: | ---: | ---: | ---: |"
     val rows = results.map { result =>
       val interval = if (!result.isAggregate) {
         result.interval
@@ -206,15 +209,77 @@ object AnalyzerInterpreter
       }
       val values = List(
         interval,
-        result.yearlyFee.toString,
-        result.tuition.toString,
-        result.foodAllowance.toString,
-        result.total.toString,
-        result.actualAmountPayed.toString,
-        result.diff.toString
+        result.yearlyFee.formatAmount,
+        result.tuition.formatAmount,
+        result.foodAllowance.formatAmount,
+        result.total.formatAmount,
+        result.actualAmountPayed.formatAmount,
+        result.diff.formatAmount,
       ).mkString(" | ")
       s"| $values |"
     }
-    (tableHeader :: rows).mkString("\n")
+    val table = (tableHeader :: rows).mkString("\n")
+
+    val paymentsHeader =
+      "| period | payment date | amount (€) |\n| --- | --- | ---: |"
+    val paymentsRows = results
+      .filterNot(_.isAggregate)
+      .flatMap(r => r.actualPayments.map(p => (r.interval, p)))
+      .sortBy(_._2.date)
+      .map(p =>
+        s"| ${p._1.map(i => monthYearFormatter.print(i.start)).getOrElse("-")} | ${formatter
+          .print(p._2.date)} | ${p._2.amount.formatAmount} |")
+    val paymentsTable = (paymentsHeader :: paymentsRows).mkString("\n")
+
+    s"""## ${debitor.lastNames.sorted.mkString(", ")} (${debitor.children
+         .mkString(", ")})
+       |
+       |$table
+       |
+       |</br>
+       |
+       |$paymentsTable
+       |
+       |*additional payments*: ${results
+         .filterNot(_.isAggregate)
+         .foldMap(_.extraPayments)
+         .formatAmount} €
+     """.stripMargin
   }
+
+  private def bootstrapTemplate(content: String) =
+    s"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Payments Scalaspatzen e.V.</title>
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+    <div class="container">
+
+      <div class="starter-template">
+      $content
+      </div>
+
+    </div><!-- /.container -->
+
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp" crossorigin="anonymous">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+  </body>
+</html>"""
 }

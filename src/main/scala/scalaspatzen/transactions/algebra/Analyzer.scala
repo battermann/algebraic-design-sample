@@ -9,13 +9,10 @@ trait Analyzer[Debitor, Transaction, Amount, PayableAmounts, ComparisonResult] {
   type TransactionsPerDebitor = Map[Debitor, List[Transaction]]
   type TransactionsPerIntervalPerDebitor =
     Map[Debitor, Map[Interval, List[Transaction]]]
-  type AmountsPerIntervalPerDebitor = Map[Debitor, Map[Interval, Amount]]
   type ComparisonResults = Map[Debitor, List[ComparisonResult]]
   type RawLine = String
 
   def decode(line: RawLine): Option[Transaction]
-
-  def getAmount(tan: Transaction): Amount
 
   def groupByDebitor(
       debitors: List[Debitor]): List[Transaction] => TransactionsPerDebitor
@@ -24,7 +21,7 @@ trait Analyzer[Debitor, Transaction, Amount, PayableAmounts, ComparisonResult] {
     : TransactionsPerDebitor => TransactionsPerIntervalPerDebitor
 
   def compare(debitors: List[Debitor], payableAmounts: PayableAmounts)
-    : AmountsPerIntervalPerDebitor => ComparisonResults
+    : TransactionsPerIntervalPerDebitor => ComparisonResults
 
   def toHtml(result: ComparisonResults): String
 

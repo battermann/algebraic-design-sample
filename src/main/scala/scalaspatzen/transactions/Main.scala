@@ -1,15 +1,9 @@
 package scalaspatzen.transactions
 
-import scalaspatzen.transactions.interpreters.{
-  AnalyzerInterpreter,
-  BrowserInterpreter,
-  ConfigInterpreter,
-  FileSystemInterpreter
-}
 import caseapp.{CaseApp, RemainingArgs}
 import cats.implicits._
 
-import scalaspatzen.transactions.algebra.AnalyzerService
+import scalaspatzen.transactions.interpreters._
 import scalaspatzen.transactions.programs.AnalyzerServiceImpl
 
 object Main extends CaseApp[CliOptions] {
@@ -22,6 +16,7 @@ object Main extends CaseApp[CliOptions] {
 
     import programs._
 
-    generateReportAndOpenInBrowser(options.input, options.output).value.unsafeRunSync()
+    generateReportAndOpenInBrowser(options.input, options.output).value
+      .unsafeRunSync()
   }
 }
