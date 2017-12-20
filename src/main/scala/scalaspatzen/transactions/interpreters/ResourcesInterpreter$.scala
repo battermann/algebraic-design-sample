@@ -38,9 +38,9 @@ object ResourcesInterpreter$ extends Resources[ErrorOrIO, Environment] {
               lastNames = d.lastNames.toList,
               children = d.children.toList,
               tuitionSuspended =
-                d.tuitionSuspended.map(toInterval).toList,
+                d.tuitionSuspended.map(_.map(toInterval)).toList.flatten,
               foodAllowanceSuspended =
-                d.foodAllowanceSuspended.map(toInterval).toList,
+                d.foodAllowanceSuspended.map(_.map(toInterval)).toList.flatten,
               extraPayments = BigDecimal(d.extraPayments.toString)
           ))
           .toList
