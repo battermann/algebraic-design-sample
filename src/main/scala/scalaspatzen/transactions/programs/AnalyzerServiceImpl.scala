@@ -24,8 +24,8 @@ class AnalyzerServiceImpl(
   def generateHtmlReport(
       inputDir: String): ErrorOrIO[Map[Debitor, List[ComparisonResult]]] = {
     import analyzer._
-    import resources._
     import fs._
+    import resources._
 
     def analyze(debitors: List[Debitor],
                 paymentsDueDayOfMonth: Int,
@@ -37,10 +37,10 @@ class AnalyzerServiceImpl(
         compare(debitors, payableAmounts)
 
     for {
-      files    <- listFiles(inputDir)
+      files <- listFiles(inputDir)
       csvFiles = files.filter(path => path.endsWith(".csv"))
       rawLines <- csvFiles.traverse(readAllLines("Windows-1250"))
-      c        <- getConfig
+      c <- getConfig
     } yield
       analyze(c.debitors,
               c.paymentsDueDayOfMonth,
@@ -51,23 +51,30 @@ class AnalyzerServiceImpl(
     fs.writeAllText(report, filename)
   }
 
-  def openHtmlReportInBrowser(filename: String): ErrorOrIO[Unit] = {
+  def openReportInBrowser(filename: String): ErrorOrIO[Unit] = {
     browser.openFile(filename)
   }
 
-  def generateReportAndOpenInBrowser(input: String,
-                                     output: String): ErrorOrIO[Unit] = {
+  def generateAndOpenReport(
+      input: String,
+      output: String,
+      outputFormat: OutputFormat): ErrorOrIO[Unit] = {
     import formatter._
     import resources._
 
     for {
       report <- generateHtmlReport(input)
-      md     = toMarkdown(report)
-      css    <- getCss
-      html   = markdownToHtml(md, css)
-      _      <- saveHtmlReport(html, s"$output.html")
-      _      <- exportToPdf(html, s"$output.pdf")
-      _      <- openHtmlReportInBrowser(s"$output.html")
+      md = toMarkdown(report)
+      css <- getCss
+      html = markdownToHtml(md, css)
+      _ <- saveHtmlReport(html, s"$output.html")
+      file <- outputFormat match {
+        case Html => s"$output.html".pure[ErrorOrIO]
+        case Pdf =>
+          val filename = s"$output.pdf"
+          exportToPdf(html, filename).map(_ => filename)
+      }
+      _ <- openReportInBrowser(file)
     } yield ()
   }
 

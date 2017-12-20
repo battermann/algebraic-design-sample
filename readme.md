@@ -7,11 +7,13 @@ run with
 options
 
     Usage: cli-options [options]
-      --usage  
+      --usage  <bool>
             Print usage and exit
-      --help | -h  
+      --help | -h  <bool>
             Print help message and exit
       --input | -i  <string>
-            The relative or absolute path to the directory containing .csv the files.
+            The relative or absolute path to the directory containing the .csv the files.
       --output | -o  <string>
-            The name for the generated report files. Please omit file extension. (e.g. -o payment-report)
+            The name for the generated report files. Omit file extension. (e.g. -o payment-report)
+      --output-format | -f  <html | pdf>
+            Supported output formats: html (default), pdf.

@@ -5,6 +5,7 @@ import cats.implicits._
 
 import scalaspatzen.transactions.interpreters._
 import scalaspatzen.transactions.programs.AnalyzerServiceImpl
+import CliOptions._
 
 object Main extends CaseApp[CliOptions] {
   override def run(options: CliOptions, remainingArgs: RemainingArgs): Unit = {
@@ -18,7 +19,7 @@ object Main extends CaseApp[CliOptions] {
 
     import programs._
 
-    generateReportAndOpenInBrowser(options.input, options.output).value
+    generateAndOpenReport(options.input, options.output, options.outputFormat).value
       .unsafeRunSync()
   }
 }

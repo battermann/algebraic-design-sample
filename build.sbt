@@ -1,7 +1,7 @@
 import com.typesafe.config.{ConfigFactory, ConfigRenderOptions}
 
 lazy val root = (project in file("."))
-  .enablePlugins(SbtJsonPlugin)
+  .enablePlugins(SbtJsonPlugin, JavaAppPackaging)
   .settings(
     inThisBuild(
       List(
@@ -12,7 +12,7 @@ lazy val root = (project in file("."))
     scalacOptions += "-Ypartial-unification",
     scalacOptions += "-feature",
     libraryDependencies += "org.typelevel" %% "cats-core" % "1.0.0-RC1",
-    libraryDependencies += "com.github.alexarchambault" %% "case-app" % "1.2.0-M4",
+    libraryDependencies += "com.github.alexarchambault" % "case-app_2.12" % "2.0.0-M1",
     libraryDependencies += "org.typelevel" %% "cats-effect" % "0.5",
     libraryDependencies += "com.github.nscala-time" %% "nscala-time" % "2.18.0",
     libraryDependencies += "com.vladsch.flexmark" % "flexmark-all" % "0.28.20",
