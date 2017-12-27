@@ -121,8 +121,8 @@ object AnalyzerInterpreter
         ComparisonResult(isAggregate = false,
                          interval.some,
                          0,
-                         tuitionExpected,
-                         foodExpected,
+                         tuitionExpected * debitor.children.size,
+                         foodExpected * debitor.children.size,
                          actualPayments,
                          extraPayments = m.empty)
       }
