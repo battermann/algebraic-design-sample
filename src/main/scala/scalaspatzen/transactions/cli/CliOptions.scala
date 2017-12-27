@@ -1,10 +1,8 @@
-package scalaspatzen.transactions
+package scalaspatzen.transactions.cli
 
 import caseapp.core.Error.UnrecognizedValue
 import caseapp.core.argparser.{ArgParser, SimpleArgParser}
 import caseapp.{ExtraName, HelpMessage, ValueDescription}
-
-import scalaspatzen.transactions.model.{Html, OutputFormat, Pdf}
 
 case class CliOptions(
   @HelpMessage("The relative or absolute path to the directory containing the .csv the files.")

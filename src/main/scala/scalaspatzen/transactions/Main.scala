@@ -3,9 +3,10 @@ package scalaspatzen.transactions
 import caseapp.{CaseApp, RemainingArgs}
 import cats.implicits._
 
+import scalaspatzen.transactions.cli.CliOptions._
+import scalaspatzen.transactions.cli.CliOptions
 import scalaspatzen.transactions.interpreters._
 import scalaspatzen.transactions.programs.AnalyzerServiceImpl
-import CliOptions._
 
 object Main extends CaseApp[CliOptions] {
   override def run(options: CliOptions, remainingArgs: RemainingArgs): Unit = {
@@ -13,7 +14,7 @@ object Main extends CaseApp[CliOptions] {
     val programs = new AnalyzerServiceImpl(FileSystemInterpreter,
                                            BrowserInterpreter,
                                            AnalyzerInterpreter,
-                                           ResourcesInterpreter$,
+                                           ResourcesInterpreter,
                                            PdfConverterInterpreter,
                                            FormatterInterpreter)
 

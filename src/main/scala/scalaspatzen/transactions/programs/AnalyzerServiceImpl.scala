@@ -1,36 +1,41 @@
 package scalaspatzen.transactions.programs
 
-import cats.Monoid
+import cats.{Monad, Monoid}
 import cats.implicits._
 
+import scala.language.higherKinds
 import scalaspatzen.transactions.algebra._
-import scalaspatzen.transactions.interpreters.ErrorOrIO
-import scalaspatzen.transactions.model._
+import scalaspatzen.transactions.cli.{Html, OutputFormat, Pdf}
 
-class AnalyzerServiceImpl(
-    fs: FileSystem[ErrorOrIO],
-    browser: Browser[ErrorOrIO],
+class AnalyzerServiceImpl[F[_]: Monad,
+                          Debitor,
+                          Payment,
+                          Amount,
+                          PayableAmounts,
+                          ComparisonResult](
+    fs: FileSystem[F],
+    browser: Browser[F],
     analyzer: Analyzer[Debitor,
                        Payment,
-                       BigDecimal,
-                       (BigDecimal, List[MonthlyFees]),
+                       Amount,
+                       PayableAmounts,
                        ComparisonResult],
-    resources: Resources[ErrorOrIO, Environment],
-    pdfConverter: PdfConverter[ErrorOrIO, String],
+    resources: Resources[F, (List[Debitor], Int, PayableAmounts)],
+    pdfConverter: PdfConverter[F, String],
     formatter: Formatter[Map[Debitor, List[ComparisonResult]]])(
     implicit m: Monoid[BigDecimal])
-    extends AnalyzerService[ErrorOrIO, Map[Debitor, List[ComparisonResult]]] {
+    extends AnalyzerService[F, Map[Debitor, List[ComparisonResult]]] {
 
   def generateHtmlReport(
-      inputDir: String): ErrorOrIO[Map[Debitor, List[ComparisonResult]]] = {
+      inputDir: String): F[Map[Debitor, List[ComparisonResult]]] = {
     import analyzer._
     import fs._
     import resources._
 
-    def analyze(debitors: List[Debitor],
-                paymentsDueDayOfMonth: Int,
-                payableAmounts: (BigDecimal, List[MonthlyFees]))
-      : List[RawLine] => ComparisonResults =
+    def analyze(
+        debitors: List[Debitor],
+        paymentsDueDayOfMonth: Int,
+        payableAmounts: PayableAmounts): List[RawLine] => ComparisonResults =
       decodeLines andThen
         groupByDebitor(debitors) andThen
         groupByTimeInterval(paymentsDueDayOfMonth) andThen
@@ -40,25 +45,24 @@ class AnalyzerServiceImpl(
       files <- listFiles(inputDir)
       csvFiles = files.filter(path => path.endsWith(".csv"))
       rawLines <- csvFiles.traverse(readAllLines("Windows-1250"))
-      c <- getConfig
-    } yield
-      analyze(c.debitors,
-              c.paymentsDueDayOfMonth,
-              (c.yearlyFee, c.monthlyFees))(rawLines.flatten)
+      env <- getConfig
+    } yield {
+      val (debitors, paymentsDueDayOfMonth, payableAmounts) = env
+      analyze(debitors, paymentsDueDayOfMonth, payableAmounts)(rawLines.flatten)
+    }
   }
 
-  def saveHtmlReport(report: String, filename: String): ErrorOrIO[Unit] = {
+  def saveHtmlReport(report: String, filename: String): F[Unit] = {
     fs.writeAllText(report, filename)
   }
 
-  def openReportInBrowser(filename: String): ErrorOrIO[Unit] = {
+  def openReportInBrowser(filename: String): F[Unit] = {
     browser.openFile(filename)
   }
 
-  def generateAndOpenReport(
-      input: String,
-      output: String,
-      outputFormat: OutputFormat): ErrorOrIO[Unit] = {
+  def generateAndOpenReport(input: String,
+                            output: String,
+                            outputFormat: OutputFormat): F[Unit] = {
     import formatter._
     import resources._
 
@@ -69,7 +73,7 @@ class AnalyzerServiceImpl(
       html = markdownToHtml(md, css)
       _ <- saveHtmlReport(html, s"$output.html")
       file <- outputFormat match {
-        case Html => s"$output.html".pure[ErrorOrIO]
+        case Html => s"$output.html".pure[F]
         case Pdf =>
           val filename = s"$output.pdf"
           exportToPdf(html, filename).map(_ => filename)
@@ -78,7 +82,7 @@ class AnalyzerServiceImpl(
     } yield ()
   }
 
-  def exportToPdf(html: String, filename: String): ErrorOrIO[Unit] = {
+  def exportToPdf(html: String, filename: String): F[Unit] = {
     pdfConverter.exportToPdf(html, filename)
   }
 }

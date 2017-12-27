@@ -1,4 +1,4 @@
-package scalaspatzen.transactions.model
+package scalaspatzen.transactions.cli
 
 sealed trait OutputFormat
 case object Html extends OutputFormat

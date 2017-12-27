@@ -7,10 +7,3 @@ case class MonthlyFees(
   tuition: BigDecimal,
   foodAllowance: BigDecimal
 )
-
-case class Environment(
-  paymentsDueDayOfMonth: Int,
-  yearlyFee: BigDecimal,
-  monthlyFees: List[MonthlyFees],
-  debitors: List[Debitor]
-)
