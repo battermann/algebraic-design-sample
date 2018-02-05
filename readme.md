@@ -2,7 +2,7 @@
 
 run with
 
-    sbt "run -i . -o report"
+    sbt "run -i . -o report"
     
 options
 
